@@ -1,14 +1,15 @@
+#define ADD_EXPORTS
+#include "main.h"
+
+#ifndef ADD_EXPORTS
 #include <stdio.h>
+#endif
 #include <string.h>
 #include <stdlib.h>
 
 #define RLE_NIBBLES_IN_LONG (8)
 #define RLE_NIBBLES_IN_BYTE (2)
 #define RLE_BITS_IN_NIBBLE  (4)
-
-typedef unsigned char uint8;
-typedef unsigned short uint16;
-typedef unsigned int uint32;
 
 uint8 read_byte(const uint8 *buf, uint32 *offset)
 {
@@ -69,7 +70,7 @@ uint32 peek_dword_be(const uint8 *buf, uint32 offset)
     return (w1 << 16) | w2;
 }
 
-int rle_decompress(const uint8 *input, uint8 *output, int offset)
+int ADDCALL rle_decompress(const uint8 *input, uint8 *output, int offset)
 {
     uint32 read_off = offset;
     uint32 write_off = 0;
@@ -122,7 +123,7 @@ int rle_decompress(const uint8 *input, uint8 *output, int offset)
     return write_off;
 }
 
-int rle_compress(const uint8 *input, uint8 *output, int size)
+int ADDCALL rle_compress(const uint8 *input, uint8 *output, int size)
 {
     int read_off = 0;
     int write_off = 0;
@@ -187,7 +188,7 @@ int rle_compress(const uint8 *input, uint8 *output, int size)
     return write_off;
 }
 
-int rle_compressed_size(uint8 *input)
+int ADDCALL rle_compressed_size(uint8 *input)
 {
     int read_off = 0;
 
@@ -738,7 +739,7 @@ int lzh_decode_position(lzh_vars_t *v)
 
 /* compression */
 
-int lzh_compress(uint8 *input, uint8 *output, int size)
+int ADDCALL lzh_compress(uint8 *input, uint8 *output, int size)
 {
     lzh_vars_t *v = (lzh_vars_t*)malloc(sizeof(lzh_vars_t));
     lzh_init_compressor(v, input, output, size);
@@ -805,7 +806,7 @@ int lzh_compress(uint8 *input, uint8 *output, int size)
     return v->output_offset;
 }
 
-void lzh_decompress(uint8 *input, uint8 *output, int output_size)
+void ADDCALL lzh_decompress(uint8 *input, uint8 *output, int output_size)
 {
     lzh_vars_t *v = (lzh_vars_t*)malloc(sizeof(lzh_vars_t));
     lzh_init_compressor(v, input, output, output_size);
@@ -845,6 +846,7 @@ void lzh_decompress(uint8 *input, uint8 *output, int output_size)
     free(v);
 }
 
+#ifndef ADD_EXPORTS
 int main(int argc, char *argv[])
 {
     uint8 *input, *output;
@@ -901,3 +903,4 @@ int main(int argc, char *argv[])
 
     return 0;
 }
+#endif
