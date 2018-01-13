@@ -70,10 +70,11 @@ uint32 peek_dword_be(const uint8 *buf, uint32 offset)
     return (w1 << 16) | w2;
 }
 
-int ADDCALL rle_decompress(const uint8 *input, uint8 *output, int offset)
+int ADDCALL rle_decompress(const uint8 *input, uint8 *output, int offset, int *input_size)
 {
     uint32 read_off = offset;
     uint32 write_off = 0;
+	*input_size = 0;
 
     int out_size = read_dword_be(input, &read_off);
 
@@ -119,6 +120,8 @@ int ADDCALL rle_decompress(const uint8 *input, uint8 *output, int offset)
             }
         }
     }
+
+	*input_size = (read_off - offset);
 
     return write_off;
 }
@@ -350,7 +353,7 @@ static uint8 d_len[256] = {
 typedef struct lzh_vars_s {
     uint8 *input, *output;
     int input_offset, output_offset;
-    int size;
+    int output_size;
 
     int textsize;
     int codesize;
@@ -372,7 +375,7 @@ typedef struct lzh_vars_s {
     uint8 putlen;
 } lzh_vars_t;
 
-void lzh_init_compressor(lzh_vars_t *v, uint8 *input, uint8 *output, int size)
+void lzh_init_compressor(lzh_vars_t *v, uint8 *input, uint8 *output, int offset, int output_size)
 {
     for (int i = 0; i < _countof(v->freq); i++) v->freq[i] = 0;
     for (int i = 0; i < _countof(v->prnt); i++) v->prnt[i] = 0;
@@ -388,7 +391,7 @@ void lzh_init_compressor(lzh_vars_t *v, uint8 *input, uint8 *output, int size)
     v->input = input;
     v->output = output;
     v->input_offset = v->output_offset = 0;
-    v->size = size;
+    v->output_size = output_size;
 }
 
 void lzh_init_tree(lzh_vars_t *v) /* initialize trees */
@@ -495,7 +498,7 @@ int lzh_get_bit(lzh_vars_t *v) /* get one bit */
 
     while (v->getlen <= 8)
     {
-        if (v->input_offset < v->size)
+        if (v->input_offset < v->output_size)
             i = read_byte(v->input, &v->input_offset);
         else
             i = 0;
@@ -515,7 +518,7 @@ int lzh_get_byte(lzh_vars_t *v) /* get one byte */
 
     while (v->getlen <= 8)
     {
-        if (v->input_offset < v->size)
+        if (v->input_offset < v->output_size)
             i = read_byte(v->input, &v->input_offset);
         else
             i = 0;
@@ -742,7 +745,7 @@ int lzh_decode_position(lzh_vars_t *v)
 int ADDCALL lzh_compress(uint8 *input, uint8 *output, int size)
 {
     lzh_vars_t *v = (lzh_vars_t*)malloc(sizeof(lzh_vars_t));
-    lzh_init_compressor(v, input, output, size);
+    lzh_init_compressor(v, input, output, 0, size);
 
     int i, c, len, r, s, last_match_length;
 
@@ -806,10 +809,12 @@ int ADDCALL lzh_compress(uint8 *input, uint8 *output, int size)
     return v->output_offset;
 }
 
-void ADDCALL lzh_decompress(uint8 *input, uint8 *output, int output_size)
+void ADDCALL lzh_decompress(uint8 *input, uint8 *output, int offset, int output_size, int *input_size)
 {
     lzh_vars_t *v = (lzh_vars_t*)malloc(sizeof(lzh_vars_t));
-    lzh_init_compressor(v, input, output, output_size);
+    lzh_init_compressor(v, input, output, offset, output_size);
+
+	*input_size = 0;
 
     int i, j, k, r, c;
     int count;
@@ -843,6 +848,8 @@ void ADDCALL lzh_decompress(uint8 *input, uint8 *output, int output_size)
         }
     }
 
+	*input_size = (v->input_offset - offset);
+
     free(v);
 }
 
@@ -850,6 +857,20 @@ void ADDCALL lzh_decompress(uint8 *input, uint8 *output, int output_size)
 int main(int argc, char *argv[])
 {
     uint8 *input, *output;
+
+	if (argc < 4)
+	{
+		printf("Usage: tf3cmp.exe input.bin output.bin <type> <offset> [<lzh_out_size>]\n"
+			"<type>:\n"
+			"\t- dr = decompress RLE\n"
+			"\t- dl = decompress LZH (requires <lzh_out_size>)\n"
+			"\t- cr = compress RLE\n"
+			"\t- cl = compress LZH\n"
+			"<offset>: hex offset in the input data\n"
+			"<lzh_out_size>: output size of the decompressed data"
+			"\n\n");
+		return;
+	}
 
     FILE *inf = fopen(argv[1], "rb");
 
@@ -868,14 +889,20 @@ int main(int argc, char *argv[])
     fread(&input[0], 1, 0x10000, inf);
 
     int dest_size;
+	int input_size;
     if (mode == 'd')
     {
-        if (type == 'r')
-            dest_size = rle_decompress(input, output, 0);
+		if (type == 'r')
+		{
+			dest_size = rle_decompress(input, output, 0, &input_size);
+			printf("Decompressing RLE...\n");
+		}
         else
         {
             dest_size = (int)strtol(argv[5], NULL, 16);
-            lzh_decompress(input, output, dest_size);
+            lzh_decompress(input, output, 0, dest_size, &input_size);
+
+			printf("Decompressing LZH...\n");
         }
     }
     else
@@ -883,10 +910,16 @@ int main(int argc, char *argv[])
         fseek(inf, 0, SEEK_END);
         int dec_size = ftell(inf);
 
-        if (type == 'r')
-            dest_size = rle_compress(input, output, dec_size);
-        else
-            dest_size = lzh_compress(input, output, dec_size);
+		if (type == 'r')
+		{
+			dest_size = rle_compress(input, output, dec_size);
+			printf("Compressing RLE...\n");
+		}
+		else
+		{
+			dest_size = lzh_compress(input, output, dec_size);
+			printf("Compressing LZH...\n");
+		}
     }
 
     if (dest_size != 0)
@@ -894,7 +927,13 @@ int main(int argc, char *argv[])
         FILE *outf = fopen(argv[2], "wb");
         fwrite(&output[0], 1, dest_size, outf);
         fclose(outf);
+
+		printf("Source/Dest: %d->%d", input_size, dest_size);
     }
+	else
+	{
+		printf("Error decompressing data!\n");
+	}
 
     fclose(inf);
 
