@@ -14,10 +14,10 @@ typedef unsigned int uint32;
 /* Define calling convention in one place, for convenience. */
 #define ADDCALL __cdecl
 
-ADDAPI int ADDCALL rle_decompress(const uint8 *input, uint8 *output, int offset);
+ADDAPI int ADDCALL rle_decompress(const uint8 *input, uint8 *output, int offset, int *input_size);
 ADDAPI int ADDCALL rle_compress(const uint8 *input, uint8 *output, int size);
 ADDAPI int ADDCALL rle_compressed_size(uint8 *input);
 
 ADDAPI int ADDCALL lzh_compress(uint8 *input, uint8 *output, int size);
-ADDAPI void ADDCALL lzh_decompress(uint8 *input, uint8 *output, int output_size);
-
+ADDAPI void ADDCALL lzh_decompress(uint8 *input, uint8 *output, int offset, int output_size, int *input_size);
+ 
